@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4D Tesseract with Translucent Faces</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background-color: black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const scale = Math.min(canvas.width, canvas.height) * 0.2;
+
+        class Vec4 {
+            constructor(x, y, z, w) {
+                this.x = x; this.y = y; this.z = z; this.w = w;
+            }
+
+            rotateXY(angle) {
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                return new Vec4(
+                    this.x * cos - this.y * sin,
+                    this.x * sin + this.y * cos,
+                    this.z,
+                    this.w
+                );
+            }
+
+            rotateXZ(angle) {
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                return new Vec4(
+                    this.x * cos - this.z * sin,
+                    this.y,
+                    this.x * sin + this.z * cos,
+                    this.w
+                );
+            }
+
+            rotateXW(angle) {
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                return new Vec4(
+                    this.x * cos - this.w * sin,
+                    this.y,
+                    this.z,
+                    this.x * sin + this.w * cos
+                );
+            }
+
+            project3D() {
+                const scale = 1 / (4 - this.w);
+                return {
+                    x: this.x * scale,
+                    y: this.y * scale,
+                    z: this.z * scale
+                };
+            }
+        }
+
+        const vertices = [
+            new Vec4(-1, -1, -1, 1), new Vec4(1, -1, -1, 1),
+            new Vec4(1, 1, -1, 1), new Vec4(-1, 1, -1, 1),
+            new Vec4(-1, -1, 1, 1), new Vec4(1, -1, 1, 1),
+            new Vec4(1, 1, 1, 1), new Vec4(-1, 1, 1, 1),
+            new Vec4(-1, -1, -1, -1), new Vec4(1, -1, -1, -1),
+            new Vec4(1, 1, -1, -1), new Vec4(-1, 1, -1, -1),
+            new Vec4(-1, -1, 1, -1), new Vec4(1, -1, 1, -1),
+            new Vec4(1, 1, 1, -1), new Vec4(-1, 1, 1, -1)
+        ];
+
+        const edges = [
+            [0, 1], [1, 2], [2, 3], [3, 0], // Front face of outer cube
+            [4, 5], [5, 6], [6, 7], [7, 4], // Back face of outer cube
+            [0, 4], [1, 5], [2, 6], [3, 7], // Connecting edges of outer cube
+            [8, 9], [9, 10], [10, 11], [11, 8], // Front face of inner cube
+            [12, 13], [13, 14], [14, 15], [15, 12], // Back face of inner cube
+            [8, 12], [9, 13], [10, 14], [11, 15], // Connecting edges of inner cube
+            [0, 8], [1, 9], [2, 10], [3, 11], // Connections between cubes (front)
+            [4, 12], [5, 13], [6, 14], [7, 15]  // Connections between cubes (back)
+        ];
+
+        const faces = [
+            [0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [0, 3, 7, 4], [1, 2, 6, 5], // Outer cube
+            [8, 9, 10, 11], [12, 13, 14, 15], [8, 9, 13, 12], [10, 11, 15, 14], [8, 11, 15, 12], [9, 10, 14, 13], // Inner cube
+            [0, 1, 9, 8], [2, 3, 11, 10], [4, 5, 13, 12], [6, 7, 15, 14], // Connecting faces
+            [0, 3, 11, 8], [1, 2, 10, 9], [4, 7, 15, 12], [5, 6, 14, 13] // Connecting faces
+        ];
+
+        function drawTesseract(angleXY, angleXZ, angleXW) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const rotatedVertices = vertices.map(v => 
+                v.rotateXY(angleXY).rotateXZ(angleXZ).rotateXW(angleXW)
+            );
+            const projectedVertices = rotatedVertices.map(v => v.project3D());
+
+            // Draw faces
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+            faces.forEach(face => {
+                ctx.beginPath();
+                face.forEach((vertexIndex, i) => {
+                    const point = projectedVertices[vertexIndex];
+                    if (i === 0) {
+                        ctx.moveTo(point.x * scale + canvas.width / 2, point.y * scale + canvas.height / 2);
+                    } else {
+                        ctx.lineTo(point.x * scale + canvas.width / 2, point.y * scale + canvas.height / 2);
+                    }
+                });
+                ctx.closePath();
+                ctx.fill();
+            });
+
+            // Draw edges
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+            ctx.lineWidth = 2;
+            edges.forEach(edge => {
+                const p1 = projectedVertices[edge[0]];
+                const p2 = projectedVertices[edge[1]];
+                ctx.beginPath();
+                ctx.moveTo(p1.x * scale + canvas.width / 2, p1.y * scale + canvas.height / 2);
+                ctx.lineTo(p2.x * scale + canvas.width / 2, p2.y * scale + canvas.height / 2);
+                ctx.stroke();
+            });
+        }
+
+        let angleXY = 0, angleXZ = 0, angleXW = 0;
+        function animate() {
+            angleXY += 0.01;
+            angleXZ += 0.013;
+            angleXW += 0.017;
+            drawTesseract(angleXY, angleXZ, angleXW);
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            scale = Math.min(canvas.width, canvas.height) * 0.2;
+        });
+    </script>
+</body>
+</html>
